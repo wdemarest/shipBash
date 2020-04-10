@@ -1,0 +1,368 @@
+<html>
+<head>
+	<script src="jquery-3.3.1.js" charset="utf-8"></script>
+<script>
+
+let pieceList = [];
+
+let simRate = 1000/30
+let viewRate = 1000/30
+
+let drawScale = 7;
+
+class Piece {
+	constructor(x, y, radius){
+		this.x = x;
+		this.y = y;
+		this.xVel = 0;
+		this.yVel = 0;
+		this.radius = radius;
+	}
+}
+
+class Asteroid extends Piece{
+	constructor(){
+		super((Math.random()*100)+25, (Math.random()*80)+1, Math.random()+2)
+		this.type = "asteroid"
+		this.movable = false;
+	}
+}
+
+class Ship extends Piece{
+	constructor(x, y, radius, team){
+		super(x, y, radius)
+		this.team = team
+		this.movable = false;
+	}
+}
+
+class Fighter extends Ship{
+	constructor(x, y, team){
+		super(x, y, 2, team)
+		this.type = "fighter"
+	}
+}
+
+class Crusher extends Ship{
+	constructor(x, y, team){
+		super(x, y, 3, team)
+		this.type = "crusher"
+	}
+}
+
+let ImageURLs = {
+	background: 'images/background.jpg',
+
+	fighter_red_on: 'images/fighter_red_on.png',
+	fighter_blue_on: 'images/fighter_blue_on.png',
+	crusher_red_on: 'images/fighter_red_on.png',
+	crusher_blue_on: 'images/fighter_blue_on.png',
+
+	fighter_red: 'images/fighter_red.png',
+	fighter_blue: 'images/fighter_blue.png',
+	crusher_red: 'images/fighter_red.png',
+	crusher_blue: 'images/fighter_blue.png',
+
+	asteroid: 'images/asteroid.png',
+	explosion: 'images/explosion.png',
+}
+
+let Animations = {
+	explosion: {frameWidth: 196, frameHeight: 190, frameCount: 13},
+
+}
+
+let Img = {}
+
+class Sim{
+	constructor(){
+		this.pieceMoving = false;
+		this.setMovability((pieceGiven)=>pieceGiven.team == "red")
+		setInterval(()=>{this.tick()}, simRate);
+	}
+	tick(){
+		this.pieceMoving = false;
+
+		for(let piece of pieceList){
+
+			if(Math.abs(piece.xVel) > 0.1 || Math.abs(piece.yVel) > 0.1){
+				this.pieceMoving = true
+				piece.moving = true
+
+				let walkerX = piece.x;
+				let walkerY = piece.y;
+
+				let steps = Math.sqrt(piece.xVel*piece.xVel+piece.yVel*piece.yVel);
+
+				for(let i = 0; i < steps; i++){
+					walkerX += piece.xVel/steps;
+					walkerY += piece.yVel/steps;
+
+					for(let piece2 of pieceList){
+						if(piece == piece2){continue}
+						if(piece2.type == "asteroid"){
+						if( Math.abs(walkerX-piece2.x)+Math.abs(walkerY-piece2.y) <= piece.radius+piece2.radius){
+							piece.dead = true;
+							this.decideMovability(piece)
+							new Explosion ({x: piece.x, y: piece.y, radius: piece.radius*3, type: "explosion"}, view.spriteList)
+						}
+					}else{
+						if( Math.abs(walkerX-piece2.x)+Math.abs(walkerY-piece2.y) <= piece.radius+piece2.radius){
+							piece2.dead = true;
+							piece.playAgain = true;
+							new Explosion ({x: piece2.x, y: piece2.y, radius: piece2.radius*3, type: "explosion"}, view.spriteList)
+						}
+					}
+					}
+				}
+
+				piece.x += piece.xVel;
+				piece.y += piece.yVel;
+				piece.xVel *= 0.92;
+				piece.yVel *= 0.92;
+
+				if(piece.x < piece.radius || piece.y < piece.radius || piece.x > 150-piece.radius || piece.y > 100-piece.radius){
+					piece.dead = true;
+					this.decideMovability(piece)
+					new Explosion ({x: piece.x, y: piece.y, radius: piece.radius*3, type: "explosion"}, view.spriteList)
+				}
+
+			}else{
+				if(Math.abs(piece.xVel) !== 0 || Math.abs(piece.yVel) !== 0){
+					this.decideMovability(piece)
+					piece.xVel = 0;
+					piece.yVel = 0;
+				}
+
+				piece.moving = false
+
+				
+
+				
+			}
+		}
+		for(let i = 0; i < pieceList.length; i++){
+			if(pieceList[i].dead){
+				pieceList.splice(i, 1)
+				i--;
+			}
+		}
+	}
+	decideMovability(piece){
+		if(piece.playAgain && !piece.dead){
+			this.setMovability((pieceGiven)=>pieceGiven.playAgain)
+			piece.playAgain = false;
+		}else{
+			if(piece.team == "red"){
+				this.setMovability((pieceGiven)=>pieceGiven.team == "blue")
+			}else{
+				this.setMovability((pieceGiven)=>pieceGiven.team == "red")
+			}
+		}
+	}
+	setMovability(criteria){
+		for(let piece of pieceList){
+			if(criteria(piece) && piece.type != "asteroid"){
+				piece.movable = true;
+			}else{
+				piece.movable = false;
+			}
+		}
+	}
+}
+
+class Sprite {
+	constructor(parent, homeArray){
+		homeArray.push(this);
+		this.parent = parent;
+		this.isAnimation = (Animations[this.parent.type] ? true : false)
+		this.type = this.parent.type;
+		if(this.isAnimation){
+			this.frame = 0;
+			Object.assign(this, Animations[this.parent.type])
+		}
+
+		this.update();
+	}
+	update(){
+		if(this.parent.dead){
+			this.dead = true;
+			return;
+		}
+
+		this.x = this.parent.x;
+		this.y = this.parent.y;
+		this.width = (this.parent.width || this.parent.radius*2)
+		this.height = (this.parent.height || this.parent.radius*2)
+		this.direction = (this.parent.direction ? this.parent.direction : undefined)
+
+		this.x -= this.width/2;
+		this.y -= this.height/2;
+
+		if(this.type == "explosion"){
+			console.log()
+		}
+
+		if(this.isAnimation){
+			this.frame++;
+			this.image = Img[(this.parent.type)]
+		}else{
+			this.image = Img[(this.parent.team ? this.parent.type+"_"+this.parent.team+(this.parent.movable ? "_on" : "") : this.parent.type)]
+		}
+	}
+}
+
+class Explosion extends Sprite{
+	constructor(parent, homeArray){
+		parent.isAnimation = true;
+
+		super(parent, homeArray)
+
+	}
+}
+
+class View {
+	constructor(){
+		this.canvas = document.getElementById("myCanvas");
+
+		this.ctx = this.canvas.getContext("2d");
+
+		setInterval(()=>{this.tick()}, viewRate);
+
+		for(let key in ImageURLs){
+			let image = ImageURLs[key];
+			Img[key] = new Image();
+			Img[key].src = image;
+		}
+
+		this.spriteList = [];
+
+		this.initSprites()
+	}
+	initSprites(){
+		for(let piece of pieceList){
+			new Sprite(piece, this.spriteList)
+		}
+	}
+	tick(){
+		this.ctx.drawImage(Img["background"], 0, 0, 150*drawScale, 100*drawScale);
+
+		for(let i = 0; i < this.spriteList.length; i++){
+			let sprite = this.spriteList[i];
+			
+			sprite.update();
+			if(sprite.dead){
+				this.spriteList.splice(i, 1)
+				i--;
+			}
+			this.draw(sprite)
+		}
+	}
+	draw(sprite){
+		let x = sprite.x*drawScale;
+		let y = sprite.y*drawScale;
+
+		if(sprite.isAnimation){
+			this.ctx.drawImage(sprite.image, sprite.frame*sprite.frameWidth, 0, sprite.frameWidth, sprite.frameHeight, x, y, sprite.width*drawScale, sprite.height*drawScale)
+		}else{
+			this.ctx.drawImage(sprite.image, x, y, sprite.width*drawScale, sprite.height*drawScale);
+		}
+	}
+}
+
+class Control{
+	constructor(){
+		this.lastMouseX = null;
+		this.lastMouseY = null;
+
+		this.mouseDown = false;
+
+		let canvas = $( "#myCanvas" );
+		let offset = canvas.offset();
+		this.canvasOffsetLeft = offset.left;
+		this.canvasOffsetTop = offset.top;
+
+
+		$( document ).on("mousedown", null, ( event ) => {
+			this.mouseDown = true;
+		})
+
+		$( document ).on("mouseup", null, ( event ) => {
+			this.mouseDown = false;
+		})
+
+		$( document ).on("mousemove", null, ( event ) => {
+
+			
+			let mouseX = (event.pageX-this.canvasOffsetLeft)/drawScale;
+			let mouseY = (event.pageY-this.canvasOffsetTop)/drawScale;
+
+			if(this.lastMouseX && !sim.pieceMoving && this.mouseDown){
+				let xVel = mouseX - this.lastMouseX;
+				let yVel = mouseY - this.lastMouseY;
+
+				let walkerX = this.lastMouseX;
+				let walkerY = this.lastMouseY;
+
+				let steps = Math.sqrt(xVel*xVel+yVel*yVel);
+
+				for(let i = 0; i < steps; i++){
+					walkerX += xVel/steps;
+					walkerY += yVel/steps;
+
+					for(let piece of pieceList){
+						if( piece.movable && Math.abs(walkerX-piece.x)+Math.abs(walkerY-piece.y) <= piece.radius && !sim.pieceMoving){
+							piece.xVel = xVel//*10; //Collision test
+							piece.yVel = yVel//*10;
+							sim.pieceMoving = true;
+
+						}
+					}
+				}
+			}
+
+			this.lastMouseX = mouseX;
+			this.lastMouseY = mouseY;
+
+		});
+	}
+}
+
+function initpieceList(){
+	pieceList.push(new Fighter(10, 20, "red"))
+	pieceList.push(new Fighter(10, 35, "red"))
+	pieceList.push(new Crusher(10, 50, "red"))
+	pieceList.push(new Fighter(10, 65, "red"))
+	pieceList.push(new Fighter(10, 80, "red"))
+	
+	pieceList.push(new Fighter(140, 20, "blue"))
+	pieceList.push(new Fighter(140, 35, "blue"))
+	pieceList.push(new Crusher(140, 50, "blue"))
+	pieceList.push(new Fighter(140, 65, "blue"))
+	pieceList.push(new Fighter(140, 80, "blue"))
+
+	for(let i = 10; i > 0; i--){
+		pieceList.push(new Asteroid())
+	}
+}
+
+let sim
+let view
+let control
+
+$(document).ready(function(){
+	initpieceList()
+
+	sim = new Sim()
+	view = new View()
+	control = new Control()
+})
+
+
+
+</script>
+</head>
+<body>
+	<canvas id="myCanvas" width="1050" height="700" ></canvas>
+</body>
+</html>
