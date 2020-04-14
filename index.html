@@ -33,35 +33,30 @@ class Ship extends Piece{
 		super(x, y, radius)
 		this.team = team
 		this.movable = false;
+		this.type = "ship"
 	}
 }
 
 class Fighter extends Ship{
 	constructor(x, y, team){
 		super(x, y, 2, team)
-		this.type = "fighter"
 	}
 }
 
 class Crusher extends Ship{
 	constructor(x, y, team){
 		super(x, y, 3, team)
-		this.type = "crusher"
 	}
 }
 
 let ImageURLs = {
 	background: 'images/background.jpg',
 
-	fighter_red_on: 'images/fighter_red_on.png',
-	fighter_blue_on: 'images/fighter_blue_on.png',
-	crusher_red_on: 'images/fighter_red_on.png',
-	crusher_blue_on: 'images/fighter_blue_on.png',
+	ship_red_on: 'images/ship_red_on.png',
+	ship_blue_on: 'images/ship_blue_on.png',
 
-	fighter_red: 'images/fighter_red.png',
-	fighter_blue: 'images/fighter_blue.png',
-	crusher_red: 'images/fighter_red.png',
-	crusher_blue: 'images/fighter_blue.png',
+	ship_red_off: 'images/ship_red_off.png',
+	ship_blue_off: 'images/ship_blue_off.png',
 
 	asteroid: 'images/asteroid.png',
 	explosion: 'images/explosion.png',
@@ -74,6 +69,54 @@ let Animations = {
 
 let Img = {}
 
+class OnscreenText{
+	constructor(){
+		this.tutorialPhase = 0;
+	}
+	draw(){
+		if(this.tutorialPhase <= 3){
+			view.ctx.beginPath();
+			view.ctx.rect(30*drawScale, 20*drawScale, 90*drawScale, 35*drawScale)
+			view.ctx.globalAlpha = 0.6;
+			view.ctx.fillStyle = "#333333";
+			view.ctx.fill();
+			view.ctx.globalAlpha = 1;
+		}
+
+		view.ctx.fillStyle = "white";
+		view.ctx.font = "16px Arial"
+
+		if(sim.gameOver){
+			view.ctx.font = "bold 64px Arial"
+			view.ctx.fillText("Game Over", 54*drawScale, 45*drawScale)
+			return
+		}
+
+		if(this.tutorialPhase == 0){
+			view.ctx.fillText("This is Ship Bash.", 68*drawScale, 30*drawScale)
+			view.ctx.fillText("This is a two-player game. One player will be red, and one will be blue.", 38*drawScale, 35*drawScale)
+			view.ctx.fillText("The red ships are lit up, so it is currently the red player's turn.", 43*drawScale, 40*drawScale)
+		}
+		if(this.tutorialPhase == 1){
+			view.ctx.fillText("The goal of the game is to destroy all of the ships of the enemy's color.", 41*drawScale, 30*drawScale)
+			view.ctx.fillText("You do this by ramming your ships into theirs.", 54*drawScale, 35*drawScale)
+			view.ctx.fillText("Hold down your mouse, and move it quickly over one of your ships to move it.", 38*drawScale, 40*drawScale)
+		}
+		if(this.tutorialPhase == 2){
+			view.ctx.fillText("Once the blue pieces light up, it is blue's turn.", 54*drawScale, 30*drawScale)
+			view.ctx.fillText("Don't hit the asteroids. Don't go off the screen.", 54*drawScale, 35*drawScale)
+			view.ctx.fillText("Hitting an enemy lets that piece go again.", 56*drawScale, 40*drawScale)
+		}
+		if(this.tutorialPhase == 3){
+			view.ctx.fillText("Good luck.", 71*drawScale, 35*drawScale)
+		}
+		if(this.tutorialPhase <= 3){
+			view.ctx.font = "bold 16px Arial"
+			view.ctx.fillText("Press Space to Continue.", 63*drawScale, 50*drawScale)
+		}
+	}
+}
+
 class Sim{
 	constructor(){
 		this.pieceMoving = false;
@@ -81,6 +124,8 @@ class Sim{
 		setInterval(()=>{this.tick()}, simRate);
 	}
 	tick(){
+		if(this.gameOver){return}
+
 		this.pieceMoving = false;
 
 		for(let piece of pieceList){
@@ -100,19 +145,22 @@ class Sim{
 
 					for(let piece2 of pieceList){
 						if(piece == piece2){continue}
+
 						if(piece2.type == "asteroid"){
-						if( Math.abs(walkerX-piece2.x)+Math.abs(walkerY-piece2.y) <= piece.radius+piece2.radius){
-							piece.dead = true;
-							this.decideMovability(piece)
-							new Explosion ({x: piece.x, y: piece.y, radius: piece.radius*3, type: "explosion"}, view.spriteList)
+							if( Math.abs(walkerX-piece2.x)+Math.abs(walkerY-piece2.y) <= piece.radius+piece2.radius){
+								piece.dead = true;
+								this.decideMovability(piece)
+								new Explosion ({x: piece.x, y: piece.y, radius: piece.radius*2, type: "explosion"}, view.spriteList)
+								this.checkWin()
+							}
+						}else{
+							if( Math.abs(walkerX-piece2.x)+Math.abs(walkerY-piece2.y) <= piece.radius+piece2.radius){
+								piece2.dead = true;
+								piece.playAgain = true;
+								new Explosion ({x: piece2.x, y: piece2.y, radius: piece2.radius*2, type: "explosion"}, view.spriteList)
+								this.checkWin()
+							}
 						}
-					}else{
-						if( Math.abs(walkerX-piece2.x)+Math.abs(walkerY-piece2.y) <= piece.radius+piece2.radius){
-							piece2.dead = true;
-							piece.playAgain = true;
-							new Explosion ({x: piece2.x, y: piece2.y, radius: piece2.radius*3, type: "explosion"}, view.spriteList)
-						}
-					}
 					}
 				}
 
@@ -124,7 +172,8 @@ class Sim{
 				if(piece.x < piece.radius || piece.y < piece.radius || piece.x > 150-piece.radius || piece.y > 100-piece.radius){
 					piece.dead = true;
 					this.decideMovability(piece)
-					new Explosion ({x: piece.x, y: piece.y, radius: piece.radius*3, type: "explosion"}, view.spriteList)
+					new Explosion ({x: piece.x, y: piece.y, radius: piece.radius*2, type: "explosion"}, view.spriteList)
+					this.checkWin()
 				}
 
 			}else{
@@ -146,6 +195,21 @@ class Sim{
 				pieceList.splice(i, 1)
 				i--;
 			}
+		}
+	}
+	checkWin(){
+		let redAlive = false;
+		let blueAlive = false;
+		for(let piece of pieceList){
+			if(piece.team == "red" && !piece.dead){
+				redAlive = true;
+			}
+			if(piece.team == "blue" && !piece.dead){
+				blueAlive = true;
+			}
+		}
+		if(!redAlive || !blueAlive){
+			this.gameOver = true;
 		}
 	}
 	decideMovability(piece){
@@ -172,8 +236,11 @@ class Sim{
 }
 
 class Sprite {
-	constructor(parent, homeArray){
+	constructor(parent, homeArray, specialOnTick){
 		homeArray.push(this);
+
+		this.specialOnTick = specialOnTick;
+
 		this.parent = parent;
 		this.isAnimation = (Animations[this.parent.type] ? true : false)
 		this.type = this.parent.type;
@@ -190,6 +257,7 @@ class Sprite {
 			return;
 		}
 
+		
 		this.x = this.parent.x;
 		this.y = this.parent.y;
 		this.width = (this.parent.width || this.parent.radius*2)
@@ -199,6 +267,10 @@ class Sprite {
 		this.x -= this.width/2;
 		this.y -= this.height/2;
 
+		if(this.specialOnTick){
+			this.specialOnTick()
+		}
+
 		if(this.type == "explosion"){
 			console.log()
 		}
@@ -207,7 +279,7 @@ class Sprite {
 			this.frame++;
 			this.image = Img[(this.parent.type)]
 		}else{
-			this.image = Img[(this.parent.team ? this.parent.type+"_"+this.parent.team+(this.parent.movable ? "_on" : "") : this.parent.type)]
+			this.image = Img[(this.parent.team ? this.parent.type+"_"+this.parent.team+(this.parent.movable ? "_on" : "_off") : this.parent.type)]
 		}
 	}
 }
@@ -216,7 +288,10 @@ class Explosion extends Sprite{
 	constructor(parent, homeArray){
 		parent.isAnimation = true;
 
-		super(parent, homeArray)
+		super(parent, homeArray, function(){
+			if(!this.sizeIncrease){this.sizeIncrease = 1} 
+			this.parent.radius += this.sizeIncrease;
+		})
 
 	}
 }
@@ -257,10 +332,16 @@ class View {
 			}
 			this.draw(sprite)
 		}
+		onscreenText.draw();
 	}
 	draw(sprite){
 		let x = sprite.x*drawScale;
 		let y = sprite.y*drawScale;
+
+		//atan2 (vy,vx)
+
+
+      	//context.translate(x, y,
 
 		if(sprite.isAnimation){
 			this.ctx.drawImage(sprite.image, sprite.frame*sprite.frameWidth, 0, sprite.frameWidth, sprite.frameHeight, x, y, sprite.width*drawScale, sprite.height*drawScale)
@@ -282,6 +363,12 @@ class Control{
 		this.canvasOffsetLeft = offset.left;
 		this.canvasOffsetTop = offset.top;
 
+
+		$( document ).on("keypress", null, ( event ) => {
+			if(event.key = "space"){
+				onscreenText.tutorialPhase++;
+			}
+		})
 
 		$( document ).on("mousedown", null, ( event ) => {
 			this.mouseDown = true;
@@ -349,6 +436,7 @@ function initpieceList(){
 let sim
 let view
 let control
+let onscreenText
 
 $(document).ready(function(){
 	initpieceList()
@@ -356,6 +444,7 @@ $(document).ready(function(){
 	sim = new Sim()
 	view = new View()
 	control = new Control()
+	onscreenText = new OnscreenText()
 })
 
 
